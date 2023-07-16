@@ -1,0 +1,90 @@
+function hideEmptyRows() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Workshop');
+  var maxRows = sheet.getMaxRows();
+  var values = sheet.getRange('A1:A' + maxRows).getValues();
+
+  // Find the first and last filled row
+  var firstFilledRow = values.findIndex(row => row[0] != '') + 1;
+  var lastFilledRow = values.length - [...values].reverse().findIndex(row => row[0] != '');
+
+  sheet.showRows(1, maxRows); // Show all rows initially
+
+  for (var row = firstFilledRow; row <= lastFilledRow; row++) {
+    if (values[row - 1][0] == "") {
+      sheet.hideRows(row);
+    }
+  }
+}
+
+function onEdit(e) {
+  var activeSheet = e.source.getActiveSheet();
+  var editedCell = activeSheet.getActiveCell();
+  var checkboxColumn = 14;
+  var dateColumn = 10;  
+
+
+  if (activeSheet.getName() == 'New Items' && editedCell.getColumn() == 17 && editedCell.getValue() == true) {
+    var row = editedCell.getRow();
+    var range = activeSheet.getRange(row, 1, 1, 12); //Columns from Date In to Min Price
+    var destinationSheet = e.source.getSheetByName('Inventory');
+
+    // Define a range encompassing the first six columns and all rows
+    var checkRange = destinationSheet.getRange(1, 1, destinationSheet.getLastRow(), 6);
+
+    // Find the last row within that range that contains any content
+    var values = checkRange.getValues();
+    var lastRow = 0;
+    for (var i = values.length - 1; i >= 0; i--) {
+      if (values[i].join('') !== '') {
+        lastRow = i + 1;
+        break;
+      }
+    }
+
+    var emptyRow = lastRow + 1; //Find the last empty row on the Inventory sheet
+    var destRange = destinationSheet.getRange(emptyRow, 1, 1, 12);
+    destRange.setValues(range.getValues()); //Copy the values
+
+    // Apply checkbox data validation rule to column F
+    var rule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+    var checkboxCell = destinationSheet.getRange('G' + emptyRow);
+    checkboxCell.setDataValidation(rule);
+
+    // Checkboxes at L2, M2 and O2
+    ['M', 'N', 'P'].forEach(function(column) {
+      var checkboxCell = destinationSheet.getRange(column + emptyRow);
+      checkboxCell.setDataValidation(rule);
+    });
+
+    // Formula at N2
+    var formulaCell = destinationSheet.getRange('O' + emptyRow);
+    // formulaCell.setFormula('=IF(\'New Items\'!$H' + row + ' = "Consign", TODAY() + 15, "")');
+    formulaCell.setFormula('=ARRAYFORMULA(IF($N' + emptyRow + '="", "", IF($N' + emptyRow + '=TRUE, TEXT(TODAY()+15, "dd/mm/yyyy"), "")))');
+    activeSheet.hideRows(row); //Hide the row
+  }
+  
+  // Add condition to hide empty rows in 'Workshop' sheet on edit
+  if (activeSheet.getName() === 'Workshop' && editedCell.getColumn() === 7) {
+    hideEmptyRows();
+  }
+  
+  if (activeSheet.getName() === "Workshop" && editedCell.getColumn() === dateColumn) {
+    var row = editedCell.getRow();
+    activeSheet.hideRows(row);
+  }
+
+  if (activeSheet.getName() === "Inventory" && editedCell.getColumn() === checkboxColumn) {
+    var checkValue = editedCell.getValue();
+    if (checkValue === true) {
+      var dateCell = activeSheet.getRange(editedCell.getRow(), 15); // Change this to your actual 'Date' column
+      var currentDate = new Date();
+      var futureDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 15);
+      dateCell.setValue(futureDate);
+    }
+    else {
+      var dateCell = activeSheet.getRange(editedCell.getRow(), 15); // Change this to your actual 'Date' column
+      dateCell.clearContent(); // Clear the date cell when checkbox is unchecked
+    }
+  }
+}
